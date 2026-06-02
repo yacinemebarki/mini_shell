@@ -1,0 +1,3 @@
+/home/yacine10/mini_shell/build/CMakeFiles/mini_shell.dir
+/home/yacine10/mini_shell/build/CMakeFiles/edit_cache.dir
+/home/yacine10/mini_shell/build/CMakeFiles/rebuild_cache.dir

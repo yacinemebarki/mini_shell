@@ -1,0 +1,19 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build gtk app",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "gcc main.c -o output/main $(pkg-config --cflags --libs gtk4)"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
