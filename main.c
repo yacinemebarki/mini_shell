@@ -1,6 +1,12 @@
+#include <errno.h>
 #include <gtk-4.0/gtk/gtk.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <unistd.h>
 
 
 bool editable(GtkTextView *text_view, int *count){
@@ -8,7 +14,7 @@ bool editable(GtkTextView *text_view, int *count){
     GtkTextIter iter;
     gtk_text_buffer_get_iter_at_mark(buffer, &iter,gtk_text_buffer_get_insert(buffer));
     int line = gtk_text_iter_get_line(&iter);
-    printf("the line is %d \n",line);
+    printf("line number is %d \n",line);
     if(line != *count){
         gtk_text_view_set_editable(text_view, false);
         return false;
@@ -19,6 +25,7 @@ bool editable(GtkTextView *text_view, int *count){
     }
 }
 
+
 char  *get_command(GtkTextView *text_view, int *count){
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(text_view);
     GtkTextIter start,end;
@@ -26,13 +33,56 @@ char  *get_command(GtkTextView *text_view, int *count){
     end = start;
     gtk_text_iter_forward_to_line_end(&end);
     char *command = gtk_text_buffer_get_text(buffer, &start, &end, false);
+    printf("the line is : %s \n",command);
     return command;
 }
-/*
+
+
 void run_command(GtkTextView *text_view, int *count,char *command){
-    
+    GtkTextBuffer *buffer;
+    GtkTextIter end, iter;
+
+    buffer = gtk_text_view_get_buffer(text_view);
+
+    if(strcmp(command, "exit") == 0){
+        exit(0);
+    }
+    else{
+        int i = 0;
+        char *args[100];
+        char *token = strtok(command, " ");
+        while(token != NULL){
+            args[i++] = token;
+            token = strtok(NULL, " ");
+        }
+
+        pid_t pid = fork();
+        if(pid == 0){
+            if(execvp(args[0], args) == -1){
+                char *error = strerror(errno);
+                gtk_text_buffer_get_end_iter(buffer, &end);
+                gtk_text_buffer_insert(buffer, &end, error, -1);
+                gtk_text_buffer_get_iter_at_mark(buffer, &iter, gtk_text_buffer_get_insert(buffer));
+                *count = gtk_text_iter_get_line(&iter);
+            }
+            exit(EXIT_FAILURE);
+        }
+        else if(pid < 0){
+            char *error = strerror(errno);
+            gtk_text_buffer_get_end_iter(buffer, &end);
+            gtk_text_buffer_insert(buffer, &end, error, -1);
+            gtk_text_buffer_get_iter_at_mark(buffer, &iter, gtk_text_buffer_get_insert(buffer));
+            *count = gtk_text_iter_get_line(&iter);
+        }
+        else {
+            int status;
+            waitpid(pid, &status, 0);
+        }
+       
+    }    
 }
-*/
+
+
 void activate(GtkApplication *app, gpointer user_data){
     int *count = (int *) user_data;
     GtkWidget *window;
