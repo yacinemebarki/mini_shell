@@ -46,6 +46,9 @@ char  *get_command(GtkTextView *text_view, int *count){
 void run_command(GtkTextView *text_view, int *count,char *command){
     GtkTextBuffer *buffer;
     GtkTextIter end, iter;
+    char path[1024];
+    getcwd(path, sizeof(path));
+
     printf("the command is : %s\n",command);
 
     int fd[2];
@@ -87,6 +90,9 @@ void run_command(GtkTextView *text_view, int *count,char *command){
             char output[4096];
             int n = read(fd[0], output, sizeof(output)-1);
             gtk_text_buffer_insert_at_cursor(buffer, "\n", -1);
+            char prompt[1200];
+            snprintf(prompt, sizeof(prompt), "%s$ ", path);
+            gtk_text_buffer_insert_at_cursor(buffer, prompt, -1);
 
             while(n > 0){
                 output[n] = '\0';
@@ -122,6 +128,8 @@ gboolean enter_pressed(GtkEventController *controller, guint key_val, guint key_
 void activate(GtkApplication *app, gpointer user_data){
     int *count = (int *) user_data;
     GtkWidget *window;
+    GtkTextIter iter;
+    char path[1024];
 
     window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(window), "mini shell");
@@ -132,6 +140,14 @@ void activate(GtkApplication *app, gpointer user_data){
     scroll = gtk_scrolled_window_new();
     text_view = gtk_text_view_new();
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), text_view);
+
+    if(getcwd(path, sizeof(path)) != NULL){
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
+        char prompt[1200];
+        snprintf(prompt, sizeof(prompt), "%s$ ", path);
+        gtk_text_buffer_get_iter_at_mark(buffer, &iter, gtk_text_buffer_get_insert(buffer));
+        gtk_text_buffer_insert(buffer, &iter, prompt,-1);
+    }
     
     GtkEventController *controller;
     controller = gtk_event_controller_key_new();
