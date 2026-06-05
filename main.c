@@ -1,3 +1,4 @@
+#include "gdk/gdkkeysyms.h"
 #include <errno.h>
 #include <gtk-4.0/gtk/gtk.h>
 #include <stdbool.h>
@@ -8,13 +9,17 @@
 #include <time.h>
 #include <unistd.h>
 
+typedef struct{
+    int count;
+    GtkTextView *text_view;
+}AppData;
+
 
 bool editable(GtkTextView *text_view, int *count){
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(text_view);
     GtkTextIter iter;
     gtk_text_buffer_get_iter_at_mark(buffer, &iter,gtk_text_buffer_get_insert(buffer));
     int line = gtk_text_iter_get_line(&iter);
-    printf("line number is %d \n",line);
     if(line != *count){
         gtk_text_view_set_editable(text_view, false);
         return false;
@@ -41,7 +46,13 @@ char  *get_command(GtkTextView *text_view, int *count){
 void run_command(GtkTextView *text_view, int *count,char *command){
     GtkTextBuffer *buffer;
     GtkTextIter end, iter;
+    printf("the command is : %s\n",command);
 
+    int fd[2];
+    if(pipe(fd) == -1){
+        perror("pipe");
+        return;
+    }
     buffer = gtk_text_view_get_buffer(text_view);
 
     if(strcmp(command, "exit") == 0){
@@ -55,31 +66,56 @@ void run_command(GtkTextView *text_view, int *count,char *command){
             args[i++] = token;
             token = strtok(NULL, " ");
         }
+        args[i] = NULL;
 
         pid_t pid = fork();
         if(pid == 0){
+            close(fd[0]);
+            dup2(fd[1], STDOUT_FILENO);
+            dup2(fd[1], STDERR_FILENO);
+            close(fd[1]);
             if(execvp(args[0], args) == -1){
-                char *error = strerror(errno);
-                gtk_text_buffer_get_end_iter(buffer, &end);
-                gtk_text_buffer_insert(buffer, &end, error, -1);
-                gtk_text_buffer_get_iter_at_mark(buffer, &iter, gtk_text_buffer_get_insert(buffer));
-                *count = gtk_text_iter_get_line(&iter);
+                perror("shell");
             }
             exit(EXIT_FAILURE);
         }
         else if(pid < 0){
-            char *error = strerror(errno);
-            gtk_text_buffer_get_end_iter(buffer, &end);
-            gtk_text_buffer_insert(buffer, &end, error, -1);
-            gtk_text_buffer_get_iter_at_mark(buffer, &iter, gtk_text_buffer_get_insert(buffer));
-            *count = gtk_text_iter_get_line(&iter);
+            perror("fork");
         }
         else {
+            close(fd[1]);
+            char output[4096];
+            int n = read(fd[0], output, sizeof(output)-1);
+            gtk_text_buffer_insert_at_cursor(buffer, "\n", -1);
+
+            while(n > 0){
+                output[n] = '\0';
+                gtk_text_buffer_get_end_iter(buffer, &end);
+                gtk_text_buffer_insert(buffer, &end, output, -1);
+                n = read(fd[0], output, sizeof(output)-1);
+            }
             int status;
             waitpid(pid, &status, 0);
+            gtk_text_buffer_get_iter_at_mark(buffer, &iter, gtk_text_buffer_get_insert(buffer));
+            gtk_text_buffer_get_iter_at_mark(buffer, &end, gtk_text_buffer_get_insert(buffer));
+            *count = gtk_text_iter_get_line(&end);
+            printf("the count after command %d \n",*count);
         }
-       
+     
     }    
+}
+
+gboolean enter_pressed(GtkEventController *controller, guint key_val, guint key_code, GdkModifierType state, gpointer user_data){
+    AppData *data = (AppData*) user_data;
+    bool edit = editable(GTK_TEXT_VIEW(data->text_view), &data->count);
+    
+    if(edit && (key_val == GDK_KEY_Return || key_val == GDK_KEY_KP_Enter)){
+        char *command = get_command(data->text_view, &data->count);
+        run_command(data->text_view, &data->count, command);
+        return true;
+             
+    }
+    return false;
 }
 
 
@@ -96,16 +132,17 @@ void activate(GtkApplication *app, gpointer user_data){
     scroll = gtk_scrolled_window_new();
     text_view = gtk_text_view_new();
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), text_view);
-    bool edit = editable(GTK_TEXT_VIEW(text_view), count);
-    if(edit == true){
-        printf("enter \n");
-        char *command = get_command(GTK_TEXT_VIEW(text_view), count);
-        /*
-        run_command(GTK_TEXT_VIEW(text_view), count);
-        */
-        printf("%s",command);
-        g_free(command);
-    }
+    
+    GtkEventController *controller;
+    controller = gtk_event_controller_key_new();
+    AppData *data = g_malloc(sizeof(AppData));
+    data->count = *count;
+    data->text_view = GTK_TEXT_VIEW(text_view);
+    g_signal_connect(controller, "key-pressed", G_CALLBACK(enter_pressed),data);
+    gtk_widget_add_controller(text_view, controller);        
+
+    
+
     gtk_window_set_child(GTK_WINDOW(window), scroll);
 
     gtk_window_present(GTK_WINDOW(window));
